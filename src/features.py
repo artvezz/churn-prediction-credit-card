@@ -30,6 +30,17 @@ TARGET_POSITIVE = "Attrited Customer"
 
 CATEGORICAL_COLUMNS = ["Gender", "Marital_Status", "Card_Category"]
 
+# Niveis conhecidos de cada categorica (universe de dummies). Fixar este conjunto
+# garante que qualquer lote produza exatamente as colunas do treino, mesmo que
+# falte uma categoria no lote - sem isso, um lote parcial derrubaria o scoring com
+# "Colunas ausentes vs treino". Categorias ineditas sao adicionadas na hora, para
+# que `reconcile_columns` continue rejeitando cardegorias novas.
+CATEGORY_LEVELS = {
+    "Gender": ["F", "M"],
+    "Marital_Status": ["Divorced", "Married", "Single", "Unknown"],
+    "Card_Category": ["Blue", "Gold", "Platinum", "Silver"],
+}
+
 # Renda: midpoint de cada faixa (em USD/ano). "Unknown" vira NaN (imputado).
 # O dataset (e a tabela `clientes`) usa a rotulacao "Less than $40K"; a chave
 # "<$40K" e mantida para tolerar a variacao de rotulagem entre fontes.
@@ -132,10 +143,18 @@ def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _dummies_with_order(df: pd.DataFrame, col: str) -> pd.DataFrame:
-    """One-hot encoding com ordem deterministica das categorias."""
-    dummies = pd.get_dummies(df[col], prefix=col, dtype=int)
-    dummies = dummies.reindex(sorted(dummies.columns), axis=1)
-    return dummies
+    """One-hot encoding com ordem deterministica das categorias.
+
+    Sempre emite os niveis de `CATEGORY_LEVELS` (mesmo ausentes no lote) mais
+    qualquer nivel inedito encontrado nos dados, em ordem alfabetica.
+    """
+    levels = list(CATEGORY_LEVELS.get(col, []))
+    levels += [v for v in df[col].dropna().unique() if v not in levels]
+    dummies = pd.DataFrame(
+        {f"{col}_{lvl}": (df[col] == lvl).astype(int) for lvl in levels},
+        index=df.index,
+    )
+    return dummies.reindex(sorted(dummies.columns), axis=1)
 
 
 def build_features(df: pd.DataFrame, drop_columns: bool = True) -> tuple[pd.DataFrame, list[str]]:

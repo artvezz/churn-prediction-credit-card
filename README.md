@@ -88,6 +88,7 @@ churn-project/
 ├── src/features.py             # engenharia de atributos (fonte única)
 ├── src/business.py             # CLV, threshold, segmentação, ROI
 ├── src/train.py                # treino end-to-end
+├── tests/                      # pytest: features, negócio e serviço de scoring
 ├── artifacts/                  # churn_model.pkl + metadados (não versionado)
 ├── scoring-service/            # FastAPI + Dockerfile + requirements
 ├── supabase/schema.sql         # tabelas clientes e churn_scores (+ view priorizada)
@@ -107,6 +108,7 @@ pip install -r requirements.txt
 kaggle datasets download -d sakshigoyal7/credit-card-customers -p data/raw --unzip
 python src/train.py               # gera artifacts/* e data/processed/churn_scores_demo.csv
 python scripts/build_notebooks.py # gera/executa notebooks 01..05
+python -m pytest                  # 50 testes (ver 5.6)
 ```
 
 ### 5.2 Supabase
@@ -165,6 +167,21 @@ streamlit run dashboard/app.py
 - Com `SUPABASE_URL` + `SUPABASE_ANON_KEY` → lê a view `v_priorizados` (última rodada de cada cliente).
 - Abas: visão geral (KPIs, quadrantes risco×valor, segmentos), lista priorizada (com filtros + download CSV)
   e explicabilidade por cliente (motivos SHAP).
+
+### 5.6 Testes
+
+```bash
+python -m pytest          # 50 testes, ~4s
+```
+
+| Arquivo | O que trava |
+|---|---|
+| `tests/test_features.py` | contrato de colunas do treino, descarte das colunas de leak, cobertura de todos os rótulos categóricos (renda/escolaridade), imputação, fórmulas das features derivadas, divisão por zero, e **lote parcial não derruba o scoring** |
+| `tests/test_business.py` | fórmula do CLV e do fator de anuidade, regra `lift·p·CLV > custo` (estritamente maior), invariante de que a decisão por-cliente domina qualquer corte global, os 4 quadrantes, ROI e consistência dos parâmetros salvos |
+| `tests/test_scoring_service.py` | mapeamento snake_case→camelCase do Supabase, cobertura de todas as colunas do `schema.sql`, contrato de saída do `score_frame`, **igualdade com os scores do treino**, e a API HTTP (`/health`, `/run-scoring`, `X-API-Key`) em modo local |
+
+Os testes que dependem de `artifacts/` ou do dataset são pulados automaticamente se eles não existirem
+(`pytest.skip`), então a suíte roda em qualquer estado do repositório.
 
 ## 6. Decisões de projeto (por quê)
 

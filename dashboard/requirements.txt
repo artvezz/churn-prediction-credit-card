@@ -1,4 +1,5 @@
-streamlit>=1.33
-plotly>=5.20
-pandas>=2.1
-requests>=2.31
+# Dashboard Streamlit (ver README 5.5) — versões fixadas.
+streamlit==1.64.0
+plotly==7.1.0
+pandas==3.0.6
+requests==2.34.2
