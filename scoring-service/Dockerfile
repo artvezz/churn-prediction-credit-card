@@ -5,9 +5,9 @@ WORKDIR /app
 COPY scoring-service/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Servico + modulo de features/negocio (fonte unica com o treino)
+# Servico + modulos de features/negocio/explicabilidade (fonte unica com o treino)
 COPY scoring-service/ /app/
-COPY src/features.py src/business.py /app/
+COPY src/features.py src/business.py src/explain.py /app/
 
 # Artefatos do treino (nao versionados; gerados por src/train.py)
 COPY artifacts/churn_model.pkl /app/model/churn_model.pkl

@@ -211,39 +211,22 @@ def build_demo_scores(
 def shap_drivers(model, X: pd.DataFrame, medians: dict, raw: pd.DataFrame | None = None) -> None:
     """Calcula SHAP (TreeExplainer) e salva as top contribuicoes por cliente.
 
-    Salva dois artefatos:
+    A logica esta em `explain.py` (fonte unica com o servico de scoring); aqui
+    apenas materializamos os artefatos dos notebooks:
       - shap_local.json: drivers indexados por posicao (ordem dos dados);
       - shap_by_client.json: drivers indexados por id_cliente (para o dashboard).
     """
-    import shap
+    import explain
 
     X_fit = fe.impute_medians(X, medians)
-    explainer = shap.TreeExplainer(model)
-    sv = explainer.shap_values(X_fit)
-    cols = list(X_fit.columns)
-
-    drivers = {}
-    for i in range(len(X_fit)):
-        row = np.abs(sv[i])
-        order = np.argsort(row)[::-1]
-        top_pos, top_neg = [], []
-        for j in order[:5]:
-            name = cols[j]
-            val = float(sv[i][j])
-            if val >= 0:
-                top_pos.append({"feature": name, "values": round(val, 4)})
-            else:
-                top_neg.append({"feature": name, "values": round(val, 4)})
-            if len(top_pos) >= 3 and len(top_neg) >= 3:
-                break
-        drivers[i] = {"pressiona_churn": top_pos[:3], "protege_churn": top_neg[:3]}
+    by_position = explain.shap_drivers(model, X_fit, ids=list(range(len(X_fit))))
 
     with open(ARTIFACTS / "shap_local.json", "w", encoding="utf-8") as f:
-        json.dump(drivers, f)
+        json.dump(by_position, f)
 
     if raw is not None:
         by_client = {
-            str(int(raw.iloc[i][fe.ID_COLUMN])): drivers[i] for i in range(len(drivers))
+            str(int(raw.iloc[i][fe.ID_COLUMN])): by_position[str(i)] for i in range(len(by_position))
         }
         with open(ARTIFACTS / "shap_by_client.json", "w", encoding="utf-8") as f:
             json.dump(by_client, f)

@@ -92,7 +92,9 @@ e uso de Pix** quando disponíveis.
 2. **Time humano** entra só nos `retencao_prioritaria` (476 ≈ 4,7% da base);
 3. **Automação** dispara oferta de baixo custo para os `acao_automatizada`;
 4. **Dashboard** como única fonte da lista priorizada com motivo (SHAP) e ROI;
-5. **Revisar semestralmente** premissas de custo/lift com o resultado das campanhas reais
+5. **O motivo do cliente é recalculado a cada lote** — o laudo SHAP viaja junto do score
+   (`data/processed/shap_by_client.json`), então a explicação nunca descreve um modelo antigo;
+6. **Revisar semestralmente** premissas de custo/lift com o resultado das campanhas reais
    (feedback para recalibrar o modelo).
 
 ## Limitações

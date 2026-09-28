@@ -8,3 +8,5 @@ scikit-learn==1.9.1
 xgboost==3.4.1
 joblib==1.6.0
 pydantic==2.13.5
+# Explicabilidade local (laudo SHAP por cliente em cada rodada do lote)
+shap==0.52.0

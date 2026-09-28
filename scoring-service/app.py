@@ -29,10 +29,13 @@ from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel
 
 import business
+import explain
 import features as fe
 
 MODEL_DIR = Path(__file__).resolve().parent / "model"
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
+# Sem DATA_DIR definido, usa a pasta `data/` do projeto: no container resolve
+# para /data (WORKDIR /app + volume montado) e localmente para <projeto>/data.
+DATA_DIR = Path(os.environ.get("DATA_DIR") or (Path(__file__).resolve().parent.parent / "data"))
 
 RUN_API_KEY = os.environ.get("RUN_API_KEY", "")
 CHURN_SOURCE = os.environ.get("CHURN_SOURCE", "supabase")
@@ -68,6 +71,7 @@ class RunResponse(BaseModel):
     n_por_segmento: dict[str, int]
     score_medio: float
     roi_campanha: dict
+    shap_clientes: int = 0
     detalhe: str
 
 
@@ -144,9 +148,20 @@ CLIENT_SNAKE_TO_RAW = {
 }
 
 
-def score_frame(raw: pd.DataFrame) -> pd.DataFrame:
-    """Engenharia de features -> predict -> CLV -> segmentacao."""
-    id_col = raw["CLIENTNUM"] if "CLIENTNUM" in raw.columns else raw["id_cliente"]
+def _client_ids(raw: pd.DataFrame) -> pd.Series:
+    return raw["CLIENTNUM"] if "CLIENTNUM" in raw.columns else raw["id_cliente"]
+
+
+def predict(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    """Engenharia de features -> predict -> CLV -> segmentacao.
+
+    Returns
+    -------
+    out   : DataFrame com score, CLV, segmento e acao por cliente
+    X_fit : matriz de features imputada (mesma que o modelo viu)
+    ids   : identificador de cada cliente, alinhado a `out`
+    """
+    ids = _client_ids(raw)
 
     X, _ = fe.build_features(raw)
     X = fe.reconcile_columns(X, bundle.feature_columns)
@@ -166,14 +181,43 @@ def score_frame(raw: pd.DataFrame) -> pd.DataFrame:
 
     out = pd.DataFrame(
         {
-            "id_cliente": id_col.values,
+            "id_cliente": ids.values,
             "score_churn": np.round(score, 4),
             "clv_usd": np.round(clv_value, 2),
             "segmento": segmento.to_numpy(),
             "acao": [business.ACTION_LABEL[s] for s in segmento.to_numpy()],
         }
     )
+    return out, X, ids
+
+
+def score_frame(raw: pd.DataFrame) -> pd.DataFrame:
+    """Mesma coisa que `predict`, devolvendo apenas a tabela de scores."""
+    out, _, _ = predict(raw)
     return out
+
+
+def explain_frame(X: pd.DataFrame, ids: pd.Series, rodada: str) -> int:
+    """Produz o laudo SHAP da rodada e grava em `data/processed/shap_by_client.json`.
+
+    O dashboard le esse arquivo, entao o "por que este cliente esta em risco"
+    corresponde sempre ao modelo que gerou o score — em vez de ficar congelado
+    no ultimo treino. Falha aqui nao derruba o lote: e uma camada de explica-
+    bilidade, nao o score em si.
+    """
+    try:
+        drivers = explain.shap_drivers(bundle.model, X, ids)
+    except Exception as exc:  # pragma: no cover - defensivo
+        print(f"[aviso] SHAP nao calculado: {exc}")
+        return 0
+
+    drivers["_meta"] = {"data_execucao": rodada, "n_clientes": int(len(ids))}
+    dest = DATA_DIR / "processed" / "shap_by_client.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(dest, "w", encoding="utf-8") as f:
+        json.dump(drivers, f)
+    print(f"[shap] laudo de {len(ids)} clientes salvo em {dest}")
+    return len(ids)
 
 
 def _upsert_supabase(out: pd.DataFrame) -> None:
@@ -214,9 +258,11 @@ def run_scoring(x_api_key: str | None = Header(default=None)):
         raw = pd.read_csv(path, encoding="utf-8")
         source_desc = f"csv:{path.name}"
 
-    out = score_frame(raw)
+    out, X_fit, ids = predict(raw)
     rodada = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     out["data_execucao"] = rodada
+
+    n_shap = explain_frame(X_fit, ids, rodada)
 
     if CHURN_SOURCE == "supabase":
         _upsert_supabase(out)
@@ -235,5 +281,6 @@ def run_scoring(x_api_key: str | None = Header(default=None)):
         n_por_segmento=n_by_seg,
         score_medio=round(float(out["score_churn"].mean()), 4),
         roi_campanha=roi,
+        shap_clientes=n_shap,
         detalhe=f"Fonte: {source_desc} · {len(out)} clientes pontuados",
     )

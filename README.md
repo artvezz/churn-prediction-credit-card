@@ -83,12 +83,13 @@ churn-project/
 ├── docker-compose.yml          # churn-scoring (API :8000) + n8n (:5679)
 ├── .env.example                # copiar para .env
 ├── requirements.txt            # ambiente de treino/análise
-├── data/raw/, data/processed/  # dataset + saídas de scoring
+├── data/raw/, data/processed/  # dataset + saídas de scoring (inclui o laudo SHAP do lote)
 ├── notebooks/                  # 01_eda..05_business_layer (executados)
 ├── src/features.py             # engenharia de atributos (fonte única)
 ├── src/business.py             # CLV, threshold, segmentação, ROI
+├── src/explain.py             # SHAP por cliente (fonte única treino+serviço)
 ├── src/train.py                # treino end-to-end
-├── tests/                      # pytest: features, negócio e serviço de scoring
+├── tests/                      # pytest: features, negócio, serviço, SHAP e dashboard
 ├── artifacts/                  # churn_model.pkl + metadados (não versionado)
 ├── scoring-service/            # FastAPI + Dockerfile + requirements
 ├── supabase/schema.sql         # tabelas clientes e churn_scores (+ view priorizada)
@@ -108,7 +109,7 @@ pip install -r requirements.txt
 kaggle datasets download -d sakshigoyal7/credit-card-customers -p data/raw --unzip
 python src/train.py               # gera artifacts/* e data/processed/churn_scores_demo.csv
 python scripts/build_notebooks.py # gera/executa notebooks 01..05
-python -m pytest                  # 50 testes (ver 5.6)
+python -m pytest                  # 66 testes (ver 5.6)
 ```
 
 ### 5.2 Supabase
@@ -146,6 +147,16 @@ set PYTHONPATH=src && python -m uvicorn app:app --app-dir scoring-service --port
 **Modo demo (sem Supabase):** defina `CHURN_SOURCE=local` no `.env`; o serviço lê
 `data/raw/BankChurners.csv` (montado em `/data`) e grava `data/processed/churn_scores_local.csv`.
 
+Além dos scores, **cada rodada do lote produz o laudo SHAP por cliente** em
+`data/processed/shap_by_client.json` (em ~5s para 10k clientes). O mesmo arquivo
+é usado pela tabela `shap` do container porque o compose monta `./data:/data`, então
+o laudo exibido no dashboard corresponde sempre ao modelo que gerou o score — e não
+ao último treino. Se o cálculo do SHAP falhar, o lote ainda conclui: ele só não
+reescreve o laudo.
+
+`DATA_DIR` é opcional: sem ele, o serviço usa a pasta `data/` do projeto (e `/data`
+dentro do container, que é o volume montado).
+
 ### 5.4 Importar o fluxo no n8n
 
 ```bash
@@ -167,11 +178,13 @@ streamlit run dashboard/app.py
 - Com `SUPABASE_URL` + `SUPABASE_ANON_KEY` → lê a view `v_priorizados` (última rodada de cada cliente).
 - Abas: visão geral (KPIs, quadrantes risco×valor, segmentos), lista priorizada (com filtros + download CSV)
   e explicabilidade por cliente (motivos SHAP).
+- Os filtros da barra lateral (segmento, score mínimo e busca por ID) valem para **todas** as abas,
+  e a aba de explicabilidade informa a origem do laudo (lote ou treino).
 
 ### 5.6 Testes
 
 ```bash
-python -m pytest          # 50 testes, ~4s
+python -m pytest          # 66 testes, ~45s (2 exigem as chaves do Supabase)
 ```
 
 | Arquivo | O que trava |
@@ -179,6 +192,8 @@ python -m pytest          # 50 testes, ~4s
 | `tests/test_features.py` | contrato de colunas do treino, descarte das colunas de leak, cobertura de todos os rótulos categóricos (renda/escolaridade), imputação, fórmulas das features derivadas, divisão por zero, e **lote parcial não derruba o scoring** |
 | `tests/test_business.py` | fórmula do CLV e do fator de anuidade, regra `lift·p·CLV > custo` (estritamente maior), invariante de que a decisão por-cliente domina qualquer corte global, os 4 quadrantes, ROI e consistência dos parâmetros salvos |
 | `tests/test_scoring_service.py` | mapeamento snake_case→camelCase do Supabase, cobertura de todas as colunas do `schema.sql`, contrato de saída do `score_frame`, **igualdade com os scores do treino**, e a API HTTP (`/health`, `/run-scoring`, `X-API-Key`) em modo local |
+| `tests/test_explain.py` | formato do laudo SHAP consumido pelo dashboard, ordem por impacto, determinismo, gravação do laudo datado da rodada e **falha do SHAP não derruba o lote** |
+| `tests/test_dashboard.py` | execução real do app via `AppTest`: KPIs, filtros da sidebar afetando todas as abas, filtro sem resultado, laudo da última rodada, **paginação da view** (o PostgREST corta em 1000 linhas por requisição) e o caminho Supabase (pulado se as chaves não estiverem no ambiente) |
 
 Os testes que dependem de `artifacts/` ou do dataset são pulados automaticamente se eles não existirem
 (`pytest.skip`), então a suíte roda em qualquer estado do repositório.
@@ -190,6 +205,8 @@ Os testes que dependem de `artifacts/` ou do dataset são pulados automaticament
   (equivale, em efeito, ao SMOTE/undersampling sem inflar tempo de treino).
 - **Threshold:** otimizado por **lucro esperado**, não fixado em 0.5; e a melhor política é **por-cliente**.
 - **Ingenieria única (`src/features.py`):** mesma função no treino e no servidor elimina *train/serve skew*.
+- **Explicabilidade única (`src/explain.py`):** o mesmo código de SHAP roda no treino e no lote, então o laudo por
+  cliente nunca fica defasado em relação ao modelo que gerou o score.
 - **Supabase cloud (e não self-hosted):** overhead de rodar Postgres+Auth+Realtime+Studio não agrega valor ao
   portfólio; Docker fica só para o que precisa de isolamento reproduzível (scoring e n8n).
 - **n8n como orquestrador:** agendamento, roteamento condicional e notificação sem código; demonstra a camada
