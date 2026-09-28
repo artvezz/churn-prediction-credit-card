@@ -1,0 +1,29 @@
+# Ambiente local
+.venv/
+__pycache__/
+*.pyc
+
+# Dados e artefatos (dataset + modelo não são versionados)
+data/raw/
+data/processed/
+artifacts/
+scoring-service/model/
+*.pkl
+
+# Segredos / envs
+.env
+.env.local
+
+# n8n
+n8n_data/
+
+# Notebooks executados (resultados gerados; pode querer versionar — decisão do autor)
+# notebooks/*.ipynb
+
+# Ide/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log

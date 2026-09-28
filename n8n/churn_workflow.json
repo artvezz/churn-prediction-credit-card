@@ -1,0 +1,167 @@
+{
+  "name": "Churn - Scoring e roteamento de retencao",
+  "nodes": [
+    {
+      "id": "8f32b6a0-9c9e-4f10-9a1c-5c2d3f4a5b6c",
+      "name": "Agendamento (domingo 22h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "cronExpression": "0 22 * * 0"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2d8b30a1-7d6e-4a1b-9b2c-6a3d4e5f6a7b",
+      "name": "Chamar /run-scoring",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "http://churn-scoring:8000/run-scoring",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.RUN_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3b6a2f1c-0a7b-4c8d-9d3e-4b5c6d7e8f9a",
+      "name": "Existe retencao prioritaria?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [460, 0],
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.n_por_segmento['retencao_prioritaria'] }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4c7b3ae0-1b8d-4d9e-8e4f-5c6d7e8f9a0b",
+      "name": "Notificar time (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [700, -220],
+      "parameters": {
+        "channel": "#retencao-churn",
+        "text": "=Scoring de churn rodou em {{ $json.rodada }}.\nTotal: {{ $json.total_clientes }} | Prioritarios: {{ $json.n_por_segmento['retencao_prioritaria'] }} | Automatizados: {{ $json.n_por_segmento['acao_automatizada'] }}.\nROI estimado da campanha prioritária: {{ $json.roi_campanha['retencao_prioritaria'].roi * 100 }}%"
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "slack-retencao",
+          "name": "Slack do time de retencao"
+        }
+      }
+    },
+    {
+      "id": "5d8c4b1f-2c9e-4eaf-9f50-6d7e8f9a0b1c",
+      "name": "Email resumo para a equipe",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1.2,
+      "position": [700, 60],
+      "parameters": {
+        "fromEmail": "n8n@banco.com",
+        "toEmail": "retencao@banco.com",
+        "subject": "=Resumo de churn - {{ $json.rodada }}",
+        "emailFormat": "text",
+        "text": "=Scoring concluido.\nSegmentos: {{ JSON.stringify($json.n_por_segmento) }}\nROI: {{ JSON.stringify($json.roi_campanha) }}"
+      },
+      "credentials": {
+        "smtp": {
+          "id": "smtp-retencao",
+          "name": "SMTP corporativo"
+        }
+      }
+    },
+    {
+      "id": "6e9d5c2f-3daf-4fb0-a061-7e8f9a0b1c2d",
+      "name": "Sem retencao prioritaria (noop)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [700, 220],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Agendamento (domingo 22h)": {
+      "main": [
+        [
+          {
+            "node": "Chamar /run-scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamar /run-scoring": {
+      "main": [
+        [
+          {
+            "node": "Existe retencao prioritaria?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existe retencao prioritaria?": {
+      "main": [
+        [
+          {
+            "node": "Notificar time (Slack)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email resumo para a equipe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sem retencao prioritaria (noop)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "active": false
+}

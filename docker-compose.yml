@@ -1,0 +1,40 @@
+name: churn-project
+
+# Supabase fica em nuvem (nao sobe via Docker, conforme decisao de projeto).
+# Docker apenas para: servico de scoring (FastAPI) e n8n (orquestracao).
+
+services:
+  churn-scoring:
+    build:
+      context: .
+      dockerfile: scoring-service/Dockerfile
+    container_name: churn-scoring
+    env_file: .env
+    environment:
+      CHURN_SOURCE: ${CHURN_SOURCE:-supabase}
+      DATA_DIR: /data
+      CLIENTES_CSV: /data/raw/BankChurners.csv
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?defina N8N_ENCRYPTION_KEY no .env}
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?defina N8N_BASIC_AUTH_PASSWORD no .env}
+      RUN_API_KEY: ${RUN_API_KEY:-}
+      GENERIC_TIMEZONE: America/Sao_Paulo
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./n8n:/data
+    ports:
+      - "5679:5678"
+    depends_on:
+      - churn-scoring
+    restart: unless-stopped

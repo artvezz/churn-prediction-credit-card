@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+n8n_data
+data/raw
+data/processed
+docs
+notebooks
+scripts
+supabase
+dashboard
+*.md
+*.log
+.env
+n8n/*.md
