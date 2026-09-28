@@ -140,3 +140,19 @@ def test_dashboard_baixa_a_base_inteira_do_supabase():
     at.run()
     assert not at.exception
     assert at.metric[0].value == "476"
+
+
+def test_paginacao_do_supabase_nao_duplica_nem_perde_clientes():
+    """Ordenar so por score (que tem empates) faz a paginacao repetir e perder linhas."""
+    pytest.importorskip("requests", reason="dashboard exige requests")
+    if not (os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_ANON_KEY")):
+        pytest.skip("defina SUPABASE_URL e SUPABASE_ANON_KEY para testar o caminho Supabase")
+
+    at = AppTest.from_file(APP, default_timeout=300)
+    at.run()
+    assert not at.exception, f"erro no app: {at.exception}"
+
+    ids = at.dataframe[0].value["ID"]
+    total = int(at.metric[0].value.replace(".", "").replace(",", ""))
+    assert len(ids) == total, f"a lista tem {len(ids)} linhas, mas o KPI conta {total}"
+    assert ids.nunique() == len(ids), f"clientes repetidos na paginacao: {len(ids) - ids.nunique()}"

@@ -62,14 +62,17 @@ def load_scores(fonte: str) -> tuple[pd.DataFrame, str]:
     if fonte != "demo" and url and key:
         cabecalho = {"apikey": key, "Authorization": f"Bearer {key}"}
         # Pagina de verdade: o PostgREST corta em 1000 linhas por requisicao, e sem
-        # isso o dashboard mostraria so os 1000 clientes de maior score.
+        # isso o dashboard mostraria so os 1000 clientes de maior score. O desempate
+        # por id_cliente e obrigatorio: `score_churn` tem empates e, sem uma ordem
+        # total, a paginacao devolve linhas repetidas e perde outras.
+        params_ordem = "score_churn.desc,id_cliente.asc"
         linhas: list[dict] = []
         try:
             for pagina in range(MAX_PAGINAS):
                 r = requests.get(
                     f"{url}/rest/v1/v_priorizados",
                     headers=cabecalho,
-                    params={"select": "*", "order": "score_churn.desc", "limit": PAGINA, "offset": pagina * PAGINA},
+                    params={"select": "*", "order": params_ordem, "limit": PAGINA, "offset": pagina * PAGINA},
                     timeout=8,
                 )
                 if r.status_code != 200:

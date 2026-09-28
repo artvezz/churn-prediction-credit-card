@@ -109,7 +109,7 @@ pip install -r requirements.txt
 kaggle datasets download -d sakshigoyal7/credit-card-customers -p data/raw --unzip
 python src/train.py               # gera artifacts/* e data/processed/churn_scores_demo.csv
 python scripts/build_notebooks.py # gera/executa notebooks 01..05
-python -m pytest                  # 66 testes (ver 5.6)
+python -m pytest                  # 67 testes (ver 5.6)
 ```
 
 ### 5.2 Supabase
@@ -184,7 +184,7 @@ streamlit run dashboard/app.py
 ### 5.6 Testes
 
 ```bash
-python -m pytest          # 66 testes, ~45s (2 exigem as chaves do Supabase)
+python -m pytest          # 67 testes, ~60s (3 exigem as chaves do Supabase)
 ```
 
 | Arquivo | O que trava |
@@ -193,7 +193,7 @@ python -m pytest          # 66 testes, ~45s (2 exigem as chaves do Supabase)
 | `tests/test_business.py` | fórmula do CLV e do fator de anuidade, regra `lift·p·CLV > custo` (estritamente maior), invariante de que a decisão por-cliente domina qualquer corte global, os 4 quadrantes, ROI e consistência dos parâmetros salvos |
 | `tests/test_scoring_service.py` | mapeamento snake_case→camelCase do Supabase, cobertura de todas as colunas do `schema.sql`, contrato de saída do `score_frame`, **igualdade com os scores do treino**, e a API HTTP (`/health`, `/run-scoring`, `X-API-Key`) em modo local |
 | `tests/test_explain.py` | formato do laudo SHAP consumido pelo dashboard, ordem por impacto, determinismo, gravação do laudo datado da rodada e **falha do SHAP não derruba o lote** |
-| `tests/test_dashboard.py` | execução real do app via `AppTest`: KPIs, filtros da sidebar afetando todas as abas, filtro sem resultado, laudo da última rodada, **paginação da view** (o PostgREST corta em 1000 linhas por requisição) e o caminho Supabase (pulado se as chaves não estiverem no ambiente) |
+| `tests/test_dashboard.py` | execução real do app via `AppTest`: KPIs, filtros da sidebar afetando todas as abas, filtro sem resultado, laudo da última rodada, **paginação da view** (o PostgREST corta em 1000 linhas por requisição, e sem desempate em `score_churn` a paginação repete e perde clientes) e o caminho Supabase (pulado se as chaves não estiverem no ambiente) |
 
 Os testes que dependem de `artifacts/` ou do dataset são pulados automaticamente se eles não existirem
 (`pytest.skip`), então a suíte roda em qualquer estado do repositório.
