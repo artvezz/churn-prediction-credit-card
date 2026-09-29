@@ -227,7 +227,7 @@ Os testes que dependem de `artifacts/` ou do dataset são pulados automaticament
 Código deste repositório sob licença **MIT** — ver [`LICENSE`](LICENSE).
 
 O dataset **BankChurners — Credit Card Customers** é distribuído separadamente sob **CC0-1.0** pelo Kaggle
-e não é abrangido pela licença MIT. Ele não é versionado aqui (ver `.gitignore`); é baixado pelo comando
+e não é abrangido pela licença MIT: ele não é versionado aqui (ver `.gitignore`) e é baixado pelo comando
 `kaggle datasets download` da seção 5.1.
 
 ---

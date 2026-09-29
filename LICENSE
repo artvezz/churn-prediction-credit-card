@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Nota sobre os dados: o dataset "BankChurners - Credit Card Customers" usado nos
-notebooks e nos testes é distribuído sob CC0-1.0 pelo Kaggle e NÃO é abrangido por
-esta licença MIT. O dataset em si não é versionado neste repositório
-(ver .gitignore); ele é baixado a parte pelo comando `kaggle datasets download`
-documentado no README.
